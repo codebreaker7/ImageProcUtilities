@@ -54,6 +54,18 @@ public class ConvertTextDataCols {
                 jcol++;
             }
         }
+        // calculate probability of symbols for the first column
+        ArrayList<Double> probTable = new ArrayList<>(statDictList.get(0).size());
+        int incr = 0;
+        for (Map.Entry<Integer, Integer> entry: statDictList.get(0).entrySet()) {
+            probTable.add((double)entry.getValue() / positionTracker[0]);
+            incr++;
+        }
+        double entropy = 0.0;
+        for (int i = 0; i < probTable.size(); i++) {
+            entropy += probTable.get(i) * log2(1 / probTable.get(i));
+        }
+        System.out.println(entropy);
         for (int i = 0; i < 3; i++) {
             writer.write(String.format("Information for %d column:\n", i));
             List<Map.Entry<Integer, Integer>> entryList = new LinkedList<>(statDictList.get(i).entrySet());
@@ -89,5 +101,14 @@ public class ConvertTextDataCols {
         }
         writer.flush();
         writer.close();
+    }
+
+    public static double log2(double N)
+    {
+        // calculate log2 N indirectly
+        // using log() method
+        double result = (Math.log(N) / Math.log(2));
+
+        return result;
     }
 }
