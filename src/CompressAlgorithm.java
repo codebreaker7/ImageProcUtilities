@@ -39,13 +39,6 @@ public class CompressAlgorithm {
                     repeatCounter[jcol]++;
                 } else {
                     if (repeatCounter[jcol] >= NUM_OF_REPEATS) {
-                        //stringBuffer[jcol].append("The value ");
-                        //stringBuffer[jcol].append(prevValue[jcol]);
-                        //stringBuffer[jcol].append(" occurs ");
-                        //stringBuffer[jcol].append(repeatCounter[jcol]);
-                        //stringBuffer[jcol].append(" times starting from position ");
-                        //stringBuffer[jcol].append(positionTracker[jcol] - repeatCounter[jcol]);
-                        //stringBuffer[jcol].append('\n');
                         compressList.get(jcol).add(new SequenceInfo(prevValue[jcol], repeatCounter[jcol], positionTracker[jcol] - repeatCounter[jcol]));
                         if (sequenceStatList.get(jcol).containsKey(prevValue[jcol])) {
                             sequenceStatList.get(jcol).replace(prevValue[jcol], sequenceStatList.get(jcol).get(prevValue[jcol]) + 1);
@@ -97,19 +90,44 @@ public class CompressAlgorithm {
             writerEnt.flush();
         }
         writerEnt.write(String.format("Initial size of 128 - %d, compressed to %d, total size before - %d, size after - %d, ratio - %.2f\n", totalIniSize, totalNumBytes, overallBytes, overallBytes - totalIniSize + totalNumBytes, (float) overallBytes / (overallBytes - totalIniSize + totalNumBytes)));
+
+        // write rest blocks in as a file
+        OutputStream binFile = new FileOutputStream("residues.bin");
+        for (int listNum = 0; listNum < 3; listNum++) {
+            for (int i = 0; i < compressList.get(listNum).size(); i++) {
+                if (compressList.get(listNum).get(i).val != 128) {
+                    for (int j = 0; j < compressList.get(listNum).get(i).len; j++) {
+                        binFile.write(compressList.get(listNum).get(i).val);
+                    }
+                } else if (compressList.get(listNum).get(i).val == 128 && compressList.get(listNum).get(i).len <= 4) {
+                    for (int j = 0; j < compressList.get(listNum).get(i).len; j++) {
+                        binFile.write(compressList.get(listNum).get(i).val);
+                    }
+                }
+            }
+        }
+        binFile.flush();
+        binFile.close();
+        // compress the result file using Huffman encoding
+        File inputFile = new File("residues.bin");
+        FrequencyTable frequencyTable = HuffmanCompress.getFrequencies(inputFile);
+        frequencyTable.increment(256);
+        CodeTree codeTree = frequencyTable.buildCodeTree();
+        CanonicalCode canonCode = new CanonicalCode(codeTree, frequencyTable.getSymbolLimit());
+        codeTree = canonCode.toCodeTree();
+        try (InputStream inputStream = new FileInputStream(new File("residues.bin"))) {
+            try (BitOutputStream outputStream = new BitOutputStream(new BufferedOutputStream(new FileOutputStream(new File("residues_huff.bin"))))) {
+                HuffmanCompress.writeCodeLengthTable(outputStream, canonCode);
+                HuffmanCompress.compress(codeTree, inputStream, outputStream);
+            }
+        }
+        RandomAccessFile compressResFile = new RandomAccessFile("residues_huff.bin", "r");
+        long huffmanRes = compressResFile.length();
+        compressResFile.close();
+        writerEnt.write(String.format("Size of the residues - %d, size of compressed file -  %d\n", overallBytes - totalIniSize, huffmanRes));
+        writerEnt.write(String.format("Total size before - %d, total size after - %d, ratio - %.2f\n", overallBytes, huffmanRes + totalNumBytes, (float)overallBytes/(huffmanRes+totalNumBytes)));
         writerEnt.close();
-        // calculate probability of symbols for the first column
-        ArrayList<Double> probTable = new ArrayList<>(statDictList.get(0).size());
-        int incr = 0;
-        for (Map.Entry<Integer, Integer> entry: statDictList.get(0).entrySet()) {
-            probTable.add((double)entry.getValue() / positionTracker[0]);
-            incr++;
-        }
-        double entropy = 0.0;
-        for (int i = 0; i < probTable.size(); i++) {
-            entropy += probTable.get(i) * log2(1 / probTable.get(i));
-        }
-        //System.out.println(entropy);
+        // stat for column
         for (int i = 0; i < 3; i++) {
             writer.write(String.format("Information for %d column:\n", i));
             List<Map.Entry<Integer, Integer>> entryList = new LinkedList<>(statDictList.get(i).entrySet());
@@ -145,18 +163,5 @@ public class CompressAlgorithm {
         }
         writer.flush();
         writer.close();
-    }
-
-    public static double log2(double N)
-    {
-        // calculate log2 N indirectly
-        // using log() method
-        double result = (Math.log(N) / Math.log(2));
-
-        return result;
-    }
-
-    public void compressNumber(int number) {
-
     }
 }
