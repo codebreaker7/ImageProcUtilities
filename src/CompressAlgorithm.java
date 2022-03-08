@@ -77,11 +77,35 @@ public class CompressAlgorithm {
                     length128[listNum]++;
                     numBytes += 4;
                     if (isStart) {
-                        if (compressList.get(listNum).get(i).len < 65536) {
+                        if (compressList.get(listNum).get(i).len < 65536 && compressList.get(listNum).get(i).pos < 65536) {
                             writerEnt.write(String.format("%d - %d\n", compressList.get(listNum).get(i).pos, compressList.get(listNum).get(i).len));
                             lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;
                             initialSize += compressList.get(listNum).get(i).len;
                             isStart = false;
+                        } else if (compressList.get(listNum).get(i).pos > 65535) {
+                            //dataOutputStream.writeShort(65535);
+                            //dataOutputStream.writeShort(0);
+                            writerEnt.write(String.format("%d - %d\n", 65535, 0));
+                            int tempPos = compressList.get(listNum).get(i).pos;
+                            tempPos -= 65535;
+                            while (tempPos != 0) {
+                                if (tempPos > 65535) {
+                                    //dataOutputStream.writeShort(65535);
+                                    //dataOutputStream.writeShort(0);
+                                    writerEnt.write(String.format("%d - %d\n", 65535, 0));
+                                    tempPos -= 65535;
+                                } else {
+                                    //dataOutputStream.writeShort(tempPos);
+                                    //dataOutputStream.writeShort(compressList.get(listNum).get(i).len);
+                                    writerEnt.write(String.format("%d - %d\n", tempPos, compressList.get(listNum).get(i).len));
+                                    tempPos -= tempPos;
+                                }
+                                numBytes += 4;
+                                length128[listNum]++;
+                            }
+                            isStart = false;
+                            lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;
+                            initialSize += compressList.get(listNum).get(i).len;
                         } else {
                             int tempLength = compressList.get(listNum).get(i).len;
                             boolean isFirst = true;
@@ -107,9 +131,31 @@ public class CompressAlgorithm {
                             isStart = false;
                         }
                     } else {
-                        if (compressList.get(listNum).get(i).len < 65536) {
+                        if (compressList.get(listNum).get(i).len < 65536 && (compressList.get(listNum).get(i).pos - lastPos) < 65536) {
                             writerEnt.write(String.format("%d - %d\n", compressList.get(listNum).get(i).pos - lastPos, compressList.get(listNum).get(i).len));
                             lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;// calculate new value
+                            initialSize += compressList.get(listNum).get(i).len;
+                        } else if ((compressList.get(listNum).get(i).pos - lastPos) > 65535) {
+                            writerEnt.write(String.format("%d - %d\n", 65535, 0));
+                            int tempPos = (compressList.get(listNum).get(i).pos - lastPos);
+                            tempPos -= 65535;
+                            while (tempPos != 0) {
+                                if (tempPos > 65535) {
+                                    //dataOutputStream.writeShort(65535);
+                                    //dataOutputStream.writeShort(0);
+                                    writerEnt.write(String.format("%d - %d\n", 65535, 0));
+                                    tempPos -= 65535;
+                                } else {
+                                    //dataOutputStream.writeShort(tempPos);
+                                    //dataOutputStream.writeShort(compressList.get(listNum).get(i).len);
+                                    writerEnt.write(String.format("%d - %d\n", tempPos, compressList.get(listNum).get(i).len));
+                                    tempPos -= tempPos;
+                                }
+                                numBytes += 4;
+                                length128[listNum]++;
+                            }
+                            //isStart = false;
+                            lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;
                             initialSize += compressList.get(listNum).get(i).len;
                         } else {
                             int tempLength = compressList.get(listNum).get(i).len;
@@ -173,9 +219,12 @@ public class CompressAlgorithm {
         File inputFile = new File("residues.bin");
         FrequencyTable frequencyTable = HuffmanCompress.getFrequencies(inputFile);
         frequencyTable.increment(256);
+        System.out.println(frequencyTable.toString());
         CodeTree codeTree = frequencyTable.buildCodeTree();
+        System.out.println(codeTree.toString());
         CanonicalCode canonCode = new CanonicalCode(codeTree, frequencyTable.getSymbolLimit());
         codeTree = canonCode.toCodeTree();
+        System.out.println(codeTree.toString());
         try (InputStream inputStream = new FileInputStream(new File("residues.bin"))) {
             try (BitOutputStream outputStream = new BitOutputStream(new BufferedOutputStream(new FileOutputStream(new File("residues_huff.bin"))))) {
                 HuffmanCompress.writeCodeLengthTable(outputStream, canonCode);
@@ -266,9 +315,28 @@ public class CompressAlgorithm {
                 if (compressList.get(listNum).get(i).val == 128 && compressList.get(listNum).get(i).len > 4) {
                     numBytes += 4;
                     if (isStart) {
-                        if (compressList.get(listNum).get(i).len < 65536) {
+                        if (compressList.get(listNum).get(i).len < 65536 && compressList.get(listNum).get(i).pos < 65536) {
                             dataOutputStream.writeShort(compressList.get(listNum).get(i).pos);
                             dataOutputStream.writeShort(compressList.get(listNum).get(i).len);
+                            lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;
+                            initialSize += compressList.get(listNum).get(i).len;
+                            isStart = false;
+                        } else if (compressList.get(listNum).get(i).pos >= 65536){ // if the position is too big
+                            dataOutputStream.writeShort(65535);
+                            dataOutputStream.writeShort(0);
+                            int tempPos = compressList.get(listNum).get(i).pos;
+                            tempPos -= 65535;
+                            while (tempPos != 0) {
+                                if (tempPos > 65535) {
+                                    dataOutputStream.writeShort(65535);
+                                    dataOutputStream.writeShort(0);
+                                    tempPos -= 65535;
+                                } else {
+                                    dataOutputStream.writeShort(tempPos);
+                                    dataOutputStream.writeShort(compressList.get(listNum).get(i).len);
+                                    tempPos -= tempPos;
+                                }
+                            }
                             lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;
                             initialSize += compressList.get(listNum).get(i).len;
                             isStart = false;
@@ -299,10 +367,34 @@ public class CompressAlgorithm {
                             isStart = false;
                         }
                     } else {
-                        if (compressList.get(listNum).get(i).len < 65536) {
+                        if (compressList.get(listNum).get(i).len < 65536 && (compressList.get(listNum).get(i).pos - lastPos) < 65536) {
                             dataOutputStream.writeShort(compressList.get(listNum).get(i).pos - lastPos);
                             dataOutputStream.writeShort(compressList.get(listNum).get(i).len);
                             lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;// calculate new value
+                            initialSize += compressList.get(listNum).get(i).len;
+                        } else if ((compressList.get(listNum).get(i).pos - lastPos) > 65535) {
+                            //writerEnt.write(String.format("%d - %d\n", 65535, 0));
+                            dataOutputStream.writeShort(65535);
+                            dataOutputStream.writeShort(0);
+                            int tempPos = (compressList.get(listNum).get(i).pos - lastPos);
+                            tempPos -= 65535;
+                            while (tempPos != 0) {
+                                if (tempPos > 65535) {
+                                    dataOutputStream.writeShort(65535);
+                                    dataOutputStream.writeShort(0);
+                                    //writerEnt.write(String.format("%d - %d\n", 65535, 0));
+                                    tempPos -= 65535;
+                                } else {
+                                    dataOutputStream.writeShort(tempPos);
+                                    dataOutputStream.writeShort(compressList.get(listNum).get(i).len);
+                                    //writerEnt.write(String.format("%d - %d\n", tempPos, compressList.get(listNum).get(i).len));
+                                    tempPos -= tempPos;
+                                }
+                                numBytes += 4;
+                                //length128[listNum]++;
+                            }
+                            //isStart = false;
+                            lastPos = compressList.get(listNum).get(i).pos + compressList.get(listNum).get(i).len;
                             initialSize += compressList.get(listNum).get(i).len;
                         } else {
                             int tempLength = compressList.get(listNum).get(i).len;
@@ -346,11 +438,15 @@ public class CompressAlgorithm {
             lengths[i] = dataInputStream.readInt();
         }
         for (int i = 0; i < 3; i++) {
+            int sum = 0;
             for (int j = 0; j < lengths[i]; j++) {
                 int pos = (int)dataInputStream.readShort() & 0xffff;
                 int len = (int)dataInputStream.readShort() & 0xffff;
                 numList.get(i).add(new SequenceInfo(128, len, pos));
-                //System.out.println(String.format("%d - %d - %d - %d", i, j, len, pos));
+                sum += (len + pos);
+                //if (i == 0) {
+                //    System.out.println(String.format("%d - %d - %d - %d - %d", i, j, len, pos, sum));
+                //}
             }
         }
         dataInputStream.close();
@@ -402,6 +498,7 @@ public class CompressAlgorithm {
                     if (seqLength[j] == 0) {
                         seqMarker[j]++;
                         if (seqMarker[j] == arr128.get(j).size()) {
+                            procSequence[j] = false;
                             continue;
                         }
                         if (arr128.get(j).get(seqMarker[j]).pos != 0) {
@@ -419,12 +516,19 @@ public class CompressAlgorithm {
                     resMarker[j]++;
                     seqLength[j]--;
                     if (seqLength[j] == 0) {
-                        procSequence[j] = true;
-                        seqLength[j] = arr128.get(j).get(seqMarker[j]).len;
+                        if (arr128.get(j).get(seqMarker[j]).len != 0) {
+                            procSequence[j] = true;
+                            seqLength[j] = arr128.get(j).get(seqMarker[j]).len;
+                        } else {
+                            seqMarker[j]++;
+                            procSequence[j] = false;
+                            seqLength[j] = arr128.get(j).get(seqMarker[j]).pos;
+                        }
+                    }
                     }
                 }
-            }
             writer.write(String.format("%02X %02X %02X\n", curValue[0], curValue[1], curValue[2]));
+            writer.flush();
         }
         writer.flush();
         writer.close();
