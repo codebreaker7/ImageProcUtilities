@@ -1,1 +1,1 @@
-The project is oriented on establishing a set of useful utilities to process images or image-related data. 
+The project is oriented on establishing a set of useful utilities to process images or image-related data.
